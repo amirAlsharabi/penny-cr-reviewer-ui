@@ -31,4 +31,44 @@ describe('CrDetailComponent', () => {
 		const approveBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__approve');
 		expect(approveBtn.disabled).toBe(true);
 	});
+
+	it('renders timeline entries in chronological order (oldest first)', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const entries = fixture.nativeElement.querySelectorAll('.cr-timeline__action');
+		expect(entries.length).toBe(3);
+		expect(entries[0].textContent).toContain('CREATE');
+		expect(entries[1].textContent).toContain('SUBMIT');
+		expect(entries[2].textContent).toContain('SEND_FOR_APPROVAL');
+	});
+
+	it('requires a non-empty rejection reason before enabling Reject', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const rejectBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__reject-btn');
+		const textarea: HTMLTextAreaElement = fixture.nativeElement.querySelector('.cr-actions__reason');
+
+		expect(rejectBtn.disabled).toBe(true);
+
+		textarea.value = '    ';
+		textarea.dispatchEvent(new Event('input'));
+		fixture.detectChanges();
+		expect(rejectBtn.disabled).toBe(true);
+
+		textarea.value = 'Budget exceeded';
+		textarea.dispatchEvent(new Event('input'));
+		fixture.detectChanges();
+		expect(rejectBtn.disabled).toBe(false);
+	});
+
+	it('approves a pending CR and updates the view status to APPROVED', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const approveBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__approve');
+
+		approveBtn.click();
+		fixture.detectChanges(); // submitting becomes true
+		await flush(); // wait for mock API approve transition
+		fixture.detectChanges(); // re-render loaded state
+
+		const statusBadge = fixture.nativeElement.querySelector('.cr-status');
+		expect(statusBadge.textContent).toContain('APPROVED');
+	});
 });
