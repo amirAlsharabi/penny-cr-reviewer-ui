@@ -1,6 +1,6 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { AbstractControl, FormControl, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { CrApiService } from '../../api/cr-api.service';
 import { SessionService } from '../../session/session.service';
 import { CrDetail, TimelineEntry } from '../../models/cr.models';
@@ -14,6 +14,10 @@ import { canApprovePolicy } from '../../common/permissions';
  * permission-aware Approve/Reject actions. `load`, the diff binding, and the template skeleton are
  * provided; the timeline ordering, permission gating, actions, and reject validation are yours.
  */
+function nonWhitespaceValidator(control: AbstractControl): ValidationErrors | null {
+	const isValid = (control.value || '').trim().length > 0;
+	return isValid ? null : { whitespace: true };
+}
 @Component({
 	selector: 'app-cr-detail',
 	standalone: true,
@@ -27,8 +31,10 @@ export class CrDetailComponent implements OnInit {
 	submitting = false;
 	actionError?: string;
 	// TODO: add validation so the form is invalid until a reason is entered.
-	rejectControl = new FormControl('', { nonNullable: true });
-
+	rejectControl = new FormControl('', {
+		nonNullable: true,
+		validators: [Validators.required, nonWhitespaceValidator],
+	});
 	constructor(private readonly api: CrApiService, private readonly session: SessionService) {}
 
 	ngOnInit(): void {
@@ -56,8 +62,9 @@ export class CrDetailComponent implements OnInit {
 
 	/** Approval timeline, oldest-first. */
 	get timeline(): TimelineEntry[] {
+		if (!this.detail?.audit) return [];
 		// TODO: return the audit entries ordered chronologically (oldest first).
-		return this.detail?.audit ?? [];
+		return [...this.detail.audit].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 	}
 
 	/** Whether the current user may approve the loaded CR. */
@@ -75,13 +82,36 @@ export class CrDetailComponent implements OnInit {
 	}
 
 	async approve(): Promise<void> {
-		// TODO: perform the approve action through the API and reflect the outcome in the view.
-		throw new Error('approve() not implemented');
+		if (!this.canApprove || this.submitting || !this.detail) return;
+		this.submitting = true;
+		this.actionError = undefined;
+		try {
+			const now = new Date().toISOString();
+			const updated = await this.api.approve(this.session.user, this.detail.id, now);
+			this.state = { status: 'loaded', data: updated };
+		} catch (err) {
+			this.actionError = (err as Error).message || 'Failed to approve';
+		} finally {
+			this.submitting = false;
+		}
 	}
 
 	async reject(): Promise<void> {
-		// TODO: require a valid rejectControl, then perform the reject action through the API and
-		//       reflect the outcome in the view.
-		throw new Error('reject() not implemented');
+		this.rejectControl.markAsTouched();
+		if (!this.canReject || this.submitting || this.rejectControl.invalid || !this.detail) return;
+
+		this.submitting = true;
+		this.actionError = undefined;
+		try {
+			const now = new Date().toISOString();
+			const reason = this.rejectControl.value.trim();
+			const updated = await this.api.reject(this.session.user, this.detail.id, now, reason);
+			this.state = { status: 'loaded', data: updated };
+			this.rejectControl.reset();
+		} catch (err) {
+			this.actionError = (err as Error).message || 'Failed to reject';
+		} finally {
+			this.submitting = false;
+		}
 	}
 }
