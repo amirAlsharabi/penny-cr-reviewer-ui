@@ -69,6 +69,7 @@
 
 - Brainstorming edge cases for multi-field diff comparison (`unitPrice`, `quantity`, `description`).
 - Structuring DOM-level async test fixtures for Angular reactive forms and Jest timers.
+- Writing the IMPLEMENTATION_NOTES fill
 
 ---
 
